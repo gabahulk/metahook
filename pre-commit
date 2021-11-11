@@ -1,0 +1,78 @@
+#!/bin/bash
+fileList=$(git status --short)
+IFS=$'\n'
+
+#Algoritimo
+#Para cada arquivo no stage
+#	existe um meta desse arquivo unstaged ou untracked?
+#		se sim retorne 1
+#retorne 0
+# echo "$fileList"
+
+#${compareFile:3} esse :3 é para pegar o nome do arquivo sem o seu status do git (M, A , ?? e etc)
+#*"${compareFile:3}"* acho que o * tira o \n e afins, mas não tenho certeza e não lembro pq eu coloquei, sorry :(
+for file in $fileList; do
+	if [[ ${file:0:1} == "M" ]] || [[ ${file:0:1} == "A" ]];then
+# 			Arquivo está no stage
+		for compareFile in $fileList; do
+			if [[ ${compareFile:0:1} != "M" ]] && [[ ${compareFile:0:1} != "A" ]] && [[ ${compareFile:0:1} != "R" ]];then
+				# [[ "${compareFile:3}" == *"${file:3}"* ]] could be [[ "${compareFile:3}" == *"${file:3: -5}"* ]]??
+				if [ "${compareFile:3}" != "${file:3}" ]  && [[ "${compareFile:3}" == *"${file:3}"* ]] && [ ${compareFile: -5} == ".meta" ]; then
+					# Significa que existe um arquivo no stage com o seu .meta fora do stage
+					echo "Você comitou o asset ${file:3} sem seu devido .meta, por favor corrija!"
+					echo "Cancelando o commit... Se você tem certeza que quer comittar sem o .meta utilize do comando 'git commit --no-verify'"
+					exit 1
+				fi
+
+				if [ "${compareFile:3}" != "${file:3}" ]  && [[ "${file:3}" == *"${compareFile:3}"* ]] && [ ${file: -5} == ".meta" ]; then
+					# Significa que existe um arquivo no stage com o seu .meta fora do stage
+					echo "Você comitou o arquivo meta ${file:3} sem seu devido asset, por favor corrija!"
+					echo "Cancelando o commit... Se você tem certeza que quer comittar sem o .meta utilize do comando 'git commit --no-verify'"
+					exit 1
+				fi
+			fi
+		done
+	fi
+done
+
+fileList=$(git status --short)
+isMetaOnStage="false"
+
+
+for file in $fileList; do
+	isMetaOnStage="false"
+	shouldRequireMeta="true"
+# 			Arquivos no status
+	if [[ ${file:0:1} == "M" ]] || [[ ${file:0:1} == "A" ]] || [[ ${file:0:2} == "??" ]];then
+		for compareFile in $fileList; do
+			if [[ ${compareFile:0:1} == "M" ]] || [[ ${compareFile:0:1} == "A" ]];then
+# 				Arquivos no stage ( esses arquivos tbm estão no status)
+				if [[ "${compareFile:3}" == "${file:3}" ]];then
+					isMetaOnStage="true"
+				fi
+			fi
+
+			if [[ ${file: -5} == ".meta" ]] && [[ "${compareFile:3:-1}" == "${file:3:-5}" ]] && [[ "${compareFile: -1}" == "/" ]]; then
+				if [[ -d "${compareFile:3}" ]]; then
+					#se é um meta de um diretório, mas o diretorio não está no stage não precisa commitar o meta
+					shouldRequireMeta="false"
+				fi
+			fi
+
+		done
+
+		if [[ ${file: -5} == ".meta" ]] && [[ $isMetaOnStage == "false" ]] && [[ $shouldRequireMeta == "true" ]]; then
+			if [[ -d "${file:3:-5}/" ]]; then
+				echo "Você NÃO COMITOU o arquivo meta ${file:3}, que é de uma pasta, por favor inclua-o no commit!"
+				echo "Cancelando o commit... Se você tem certeza que quer comittar sem o .meta utilize do comando 'git commit --no-verify'"
+				exit 1
+				#se é um meta de um diretório, TEM QUE SER COMITADO
+			fi
+		fi
+	fi
+done
+
+echo "Você comitou todos os assets com seus devidos .meta, parabéns!"
+
+unset IFS
+exit 0
